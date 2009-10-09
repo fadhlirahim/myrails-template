@@ -12,17 +12,11 @@ run 'rm public/images/rails.png'
 
 plugin 'exception_notifier', :git => 'git://github.com/rails/exception_notification.git', :submodule => true
 plugin 'paperclip', :git => 'git://github.com/thoughtbot/paperclip.git', :submodule => true
-plugin 'asset_packager', :git => 'http://synthesis.sbecker.net/pages/asset_packager', :submodule => true
 plugin 'jrails', :git => 'git://github.com/aaronchi/jrails.git',:submodule => true
 
 gem 'authlogic', :git => 'git://github.com/binarylogic/authlogic.git'
 gem 'RedCloth', :lib => 'redcloth'
 gem 'mislav-will_paginate', :lib => 'will_paginate',  :source => 'http://gems.github.com'
-#gem 'rspec'
-#gem 'rspec-rails'
-
-# Run rspec generator
-#generate("rspec")
 
 # Initialize submodules
 git :submodule => "init"
@@ -97,73 +91,50 @@ class UserSessionsController < ApplicationController
 end
 FILE
 
-file "db/migrate/20090621150348_users_and_roles.rb", <<-FILE
-class UsersAndRoles < ActiveRecord::Migration
-  def self.up
-    
-    create_table :users do |t|
-      t.string    :login,               :null => false                # optional, you can use email instead, or both
-      t.string    :email,               :null => false                # optional, you can use login instead, or both
-      t.string    :crypted_password,    :default => nil, :null => true
-      t.string    :password_salt,       :default => nil, :null => true                # optional, but highly recommended
-      t.string    :persistence_token,   :null => false                # required
-      t.string    :single_access_token, :null => false                # optional, see Authlogic::Session::Params
-      t.string    :perishable_token,    :null => false                # optional, see Authlogic::Session::Perishability
-      t.boolean   :active,              :null => false, :default => false
-      # Magic columns, just like ActiveRecord's created_at and updated_at. These are automatically maintained by Authlogic if they are present.
-      t.integer   :login_count,         :null => false, :default => 0 # optional, see Authlogic::Session::MagicColumns
-      t.integer   :failed_login_count,  :null => false, :default => 0 # optional, see Authlogic::Session::MagicColumns
-      t.datetime  :last_request_at                                    # optional, see Authlogic::Session::MagicColumns
-      t.datetime  :current_login_at                                   # optional, see Authlogic::Session::MagicColumns
-      t.datetime  :last_login_at                                      # optional, see Authlogic::Session::MagicColumns
-      t.string    :current_login_ip                                   # optional, see Authlogic::Session::MagicColumns
-      t.string    :last_login_ip                                      # optional, see Authlogic::Session::MagicColumns
-      t.timestamps
-    end
-    
-    add_index :users, :login
-    add_index :users, :persistence_token
-    add_index :users, :last_request_at
-    
-
-    create_table :roles do |t|
-      t.string :name
-      t.timestamps
-    end
-    
-    create_table :user_roles do |t|
-      t.column :user_id, :integer
-      t.column :role_id, :integer
-      t.column :created_at, :datetime
-    end
-
-    add_index :user_roles, [:user_id, :role_id], :unique => true
-    add_index :roles, :name
-
-  end
-
-  def self.down
-    remove_index :roles, :name
-    remove_index :user_roles, :column => [:user_id, :role_id]
-    drop_table "users"
-    drop_table "roles"
-  end
-end
-FILE
-
-rake('db:sessions:create')
-rake "db:migrate"
-
-# Use database (active record) session store
-initializer 'session_store.rb', <<-FILE
-  ActionController::Base.session = { :session_key => '_#{(1..6).map { |x| (65 + rand(26)).chr }.join}_session', :secret => '#{(1..40).map { |x| (65 + rand(26)).chr }.join}' }
-  ActionController::Base.session_store = :active_record_store
-FILE
-
 # make user act as authentic
 file "app/models/user.rb", <<-FILE
 class User < ActiveRecord::Base
   acts_as_authentic
+  attr_accessible :login, :email, :password, :password_confirmation
+  
+  has_many :user_roles, :dependent => :destroy
+  has_many :roles, :through => :user_roles
+  
+  # returns true if the user has the "admin" role, false if not.
+  def admin?
+    has_role?("admin")
+  end
+
+  # returns true if the specified role is associated with the user.
+  #  
+  #  user.has_role("admin")
+  def has_role?(role)
+    self.roles.count(:conditions => ["name = ?", role]) > 0
+  end
+  
+  # Adds a role to the user by name
+  #
+  # user.add_role("mentor")
+  def add_role(role)
+    return if self.has_role?(role)
+    self.roles << Role.find_by_name(role)
+  end
+end
+FILE
+
+file "app/models/role.rb", <<-FILE
+class Role < ActiveRecord::Base
+  validates_presence_of :name
+  
+  has_many :user_roles
+  has_many :users, :through => :user_roles
+end
+FILE
+
+file "app/models/user_role.rb", <<-FILE
+class UserRole < ActiveRecord::Base
+  belongs_to :user
+  belongs_to :role
 end
 FILE
 
@@ -394,6 +365,70 @@ file "app/views/layouts/application.html.erb", <<-FILE
 </html>
 FILE
 
+# Migrations
+file "db/migrate/20090621150348_users_and_roles.rb", <<-FILE
+class UsersAndRoles < ActiveRecord::Migration
+  def self.up
+    
+    create_table :users do |t|
+      t.string    :login,               :null => false                # optional, you can use email instead, or both
+      t.string    :email,               :null => false                # optional, you can use login instead, or both
+      t.string    :crypted_password,    :default => nil, :null => true
+      t.string    :password_salt,       :default => nil, :null => true                # optional, but highly recommended
+      t.string    :persistence_token,   :null => false                # required
+      t.string    :single_access_token, :null => false                # optional, see Authlogic::Session::Params
+      t.string    :perishable_token,    :null => false                # optional, see Authlogic::Session::Perishability
+      # t.boolean   :active,              :null => false, :default => false
+      # Magic columns, just like ActiveRecord's created_at and updated_at. These are automatically maintained by Authlogic if they are present.
+      t.integer   :login_count,         :null => false, :default => 0 # optional, see Authlogic::Session::MagicColumns
+      t.integer   :failed_login_count,  :null => false, :default => 0 # optional, see Authlogic::Session::MagicColumns
+      t.datetime  :last_request_at                                    # optional, see Authlogic::Session::MagicColumns
+      t.datetime  :current_login_at                                   # optional, see Authlogic::Session::MagicColumns
+      t.datetime  :last_login_at                                      # optional, see Authlogic::Session::MagicColumns
+      t.string    :current_login_ip                                   # optional, see Authlogic::Session::MagicColumns
+      t.string    :last_login_ip                                      # optional, see Authlogic::Session::MagicColumns
+      t.timestamps
+    end
+    
+    add_index :users, :login
+    add_index :users, :persistence_token
+    add_index :users, :last_request_at
+    
+
+    create_table :roles do |t|
+      t.string :name
+      t.timestamps
+    end
+    
+    create_table :user_roles do |t|
+      t.column :user_id, :integer
+      t.column :role_id, :integer
+      t.column :created_at, :datetime
+    end
+
+    add_index :user_roles, [:user_id, :role_id], :unique => true
+    add_index :roles, :name
+
+  end
+
+  def self.down
+    remove_index :roles, :name
+    remove_index :user_roles, :column => [:user_id, :role_id]
+    drop_table "users"
+    drop_table "roles"
+    drop_table "user_roles"
+  end
+end
+FILE
+
+rake('db:sessions:create')
+rake "db:migrate"
+
+# Use database (active record) session store
+initializer 'session_store.rb', <<-FILE
+  ActionController::Base.session = { :session_key => '_#{(1..6).map { |x| (65 + rand(26)).chr }.join}_session', :secret => '#{(1..40).map { |x| (65 + rand(26)).chr }.join}' }
+  ActionController::Base.session_store = :active_record_store
+FILE
 
 # Set up git repository
 git :add => '.'
