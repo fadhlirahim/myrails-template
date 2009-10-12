@@ -2,27 +2,28 @@
 # Copy database.yml
 run 'cp config/database.yml config/database.yml.example'
 
-git :init
-
 # Remove unnecessary Rails files
 run 'rm README'
 run 'rm public/index.html'
 run 'rm public/favicon.ico'
 run 'rm public/images/rails.png'
 
-plugin 'exception_notifier', :git => 'git://github.com/rails/exception_notification.git', :submodule => true
-plugin 'paperclip', :git => 'git://github.com/thoughtbot/paperclip.git', :submodule => true
-plugin 'jrails', :git => 'git://github.com/aaronchi/jrails.git',:submodule => true
+#plugin 'exception_notifier', :git => 'git://github.com/rails/exception_notification.git'
+#plugin 'paperclip', :git => 'git://github.com/thoughtbot/paperclip.git'
+#plugin 'jrails', :git => 'git://github.com/aaronchi/jrails.git'
 
 gem 'authlogic', :git => 'git://github.com/binarylogic/authlogic.git'
-gem 'RedCloth', :lib => 'redcloth'
-gem 'mislav-will_paginate', :lib => 'will_paginate',  :source => 'http://gems.github.com'
+#gem 'RedCloth', :lib => 'redcloth'
+#gem 'mislav-will_paginate', :lib => 'will_paginate',  :source => 'http://gems.github.com'
 
 # Initialize submodules
-git :submodule => "init"
+#git :submodule => "init"
   
-rake("jrails:js:scrub")
-rake("jrails:js:install")
+#rake("jrails:js:scrub")
+#rake("jrails:js:install")
+
+generate :rspec
+generate :cucumber
 
 # Install and configure capistrano
 #run "gem install capistrano" if yes?('Install Capistrano on your local system? (y/n)')
@@ -326,7 +327,7 @@ file "app/views/user_sessions/new.html.erb", <<-FILE
   <br />
   <%= f.check_box :remember_me %><%= f.label :remember_me %><br />
   <br />
-  <%= f.submit "Login" %>
+  <%= f.submit "Submit" %>
 <% end %>
 FILE
 
@@ -421,17 +422,139 @@ class UsersAndRoles < ActiveRecord::Migration
 end
 FILE
 
-rake('db:sessions:create')
-rake "db:migrate"
-
 # Use database (active record) session store
 initializer 'session_store.rb', <<-FILE
   ActionController::Base.session = { :session_key => '_#{(1..6).map { |x| (65 + rand(26)).chr }.join}_session', :secret => '#{(1..40).map { |x| (65 + rand(26)).chr }.join}' }
   ActionController::Base.session_store = :active_record_store
 FILE
 
+# Cucumber features
+
+# User login
+file("features/user_login.feature") do
+  <<-EOF
+Feature: User login
+  In order to access the site
+  the user
+  wants to login with login and password
+
+  Background:
+    Given a user with the login "homer" exists
+
+  Scenario: User login
+    Given I go to the homepage
+    And I follow "Log In"
+    And I fill in "Login" with "homer"
+    And I fill in "Password" with "simpson312"
+    When I press "Submit"
+    Then I should be on the account page
+    And I should see "Login successful!"
+    And I should see "Login"
+    And I should see "Email"
+    When I follow "Edit"
+    Then I should see "Edit My Account"
+  EOF
+end
+
+file("features/user_signup.feature") do
+  <<-EOF
+  Feature: User signup
+  In order to login
+  User wants to signup and have an account
+
+  Scenario: Register new signup
+    Given I am on the homepage
+    And I follow "Register"
+    And I fill in the following:
+      | Login            | user_test |
+      | Email            | user@example.com |
+      | Password         | mouse321        |
+      | Password confirmation | mouse321 |
+    When I press "Register"
+    Then I should see "Account registered!"
+
+  Scenario: Check for too short email address during signup
+    Given I go to the homepage
+    And I follow "Register"
+    And I fill in "Login" with "homer"
+    And I press "Register"
+    Then I should see "Email is too short (minimum is 6 characters)"
+
+  Scenario: Checking the password confirmation
+    Given I go to the homepage
+    And I follow "Register"
+    And I fill in "Login" with "homer"
+    And I fill in "Email" with "homer@simpsons.com"
+    And I fill in "Password" with "homer_rocks"
+    And I fill in "Password Confirmation" with "xhomer_rocks"
+    When I press "Register"
+    Then I should see "Password doesn't match confirmation"
+
+  Scenario: Check for invalid email address during signup
+    Given I go to the homepage
+    And I follow "Register"
+    And I fill in "Login" with "homer"
+    And I fill in "Email" with "homer-simpsons.com"
+    When I press "Register"
+    Then I should see "Email should look like an email address"
+  EOF
+end
+
+file("features/step_definitions/login_steps.rb") do
+  <<-EOF
+Given /^a user with the login "([^\"]*)" exists$/ do |login|
+  user = User.create do |u|
+    u.password = u.password_confirmation = "simpson312"
+    u.login = login
+    u.email = "homersimpson@test.com"
+  end
+  user.save
+end
+  EOF
+end
+
+# paths.rb
+file("features/support/paths.rb") do
+%q{
+module NavigationHelpers
+  # Maps a name to a path. Used by the
+  #
+  #   When /^I go to (.+)$/ do |page_name|
+  #
+  # step definition in webrat_steps.rb
+  #
+  def path_to(page_name)
+    case page_name
+    
+    when /the homepage/
+      '/'
+    when /the account page/
+      '/account'
+    
+    # Add more mappings here.
+    # Here is a more fancy example:
+    #
+    #   when /^(.*)'s profile page$/i
+    #     user_profile_path(User.find_by_login($1))
+
+    else
+      raise "Can't find mapping from \"#{page_name}\" to a path.\n" +
+        "Now, go and add a mapping in #{__FILE__}"
+    end
+  end
+end
+
+World(NavigationHelpers)
+}
+end
+
+rake('db:sessions:create')
+rake "db:migrate"
+
 # Set up git repository
+git :init
 git :add => '.'
 
+
 # Success!
-puts "SUCCESS"
+puts "SUCCESS."
