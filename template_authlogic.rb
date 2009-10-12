@@ -548,6 +548,7 @@ World(NavigationHelpers)
 }
 end
 
+rake("db:create:all")
 rake('db:sessions:create')
 rake "db:migrate"
 
@@ -557,4 +558,4 @@ git :add => '.'
 
 
 # Success!
-puts "SUCCESS."
+puts "SUCCESS"
