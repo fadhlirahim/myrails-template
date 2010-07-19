@@ -352,11 +352,7 @@ class UsersAndRoles < ActiveRecord::Migration
   end
 
   def self.down
-    remove_index :roles, :name
-    remove_index :user_roles, :column => [:user_id, :role_id]
     drop_table "users"
-    drop_table "roles"
-    drop_table "user_roles"
   end
 end
 FILE
