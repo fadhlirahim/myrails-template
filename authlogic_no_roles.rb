@@ -1,5 +1,15 @@
-# Template created by You've Got Rails (http://www.youvegotrails.com)
-# Copy database.yml
+# This contains a basic Authlogic web app with 
+# Register, Login, Logout & a simple My account page
+# with a simple cucumber test for login & signup
+# 
+# Make sure you have these gems pre-installed before running these template
+# rspec
+# rspec-rails
+# cucumber
+# cucumber-rails
+# webrat
+# capistrano
+
 run 'cp config/database.yml config/database.yml.example'
 
 # Remove unnecessary Rails files
@@ -8,25 +18,10 @@ run 'rm public/index.html'
 run 'rm public/favicon.ico'
 run 'rm public/images/rails.png'
 
-#plugin 'exception_notifier', :git => 'git://github.com/rails/exception_notification.git'
-#plugin 'paperclip', :git => 'git://github.com/thoughtbot/paperclip.git'
-#plugin 'jrails', :git => 'git://github.com/aaronchi/jrails.git'
-
 gem 'authlogic', :git => 'git://github.com/binarylogic/authlogic.git'
-#gem 'RedCloth', :lib => 'redcloth'
-#gem 'mislav-will_paginate', :lib => 'will_paginate',  :source => 'http://gems.github.com'
-
-# Initialize submodules
-#git :submodule => "init"
-  
-#rake("jrails:js:scrub")
-#rake("jrails:js:install")
 
 generate :rspec
-generate :cucumber
-
-# Install and configure capistrano
-#run "gem install capistrano" if yes?('Install Capistrano on your local system? (y/n)')
+generate(:cucumber, "--webrat")
 
 capify!
 
@@ -52,7 +47,7 @@ FILE
 
 # Setup Basic AuthLogic
 # generate user_session model at app/models/user_session.rb
-generate(:session, "user_session") 
+generate(:session, "user_session")
 
 # generate user_session controller
 generate(:controller, "user_sessions")
@@ -65,7 +60,7 @@ route "map.login  '/login',  :controller => 'user_sessions', :action => 'destroy
 
 # setup UsesSessionsController
 file "app/controllers/user_sessions_controller.rb", <<-FILE
-class UserSessionsController < ApplicationController  
+class UserSessionsController < ApplicationController
   skip_before_filter :require_user # Override application wide filter
   before_filter :require_no_user, :only => [:new, :create]
   before_filter :require_user, :only => :destroy
@@ -97,45 +92,6 @@ file "app/models/user.rb", <<-FILE
 class User < ActiveRecord::Base
   acts_as_authentic
   attr_accessible :login, :email, :password, :password_confirmation
-  
-  has_many :user_roles, :dependent => :destroy
-  has_many :roles, :through => :user_roles
-  
-  # returns true if the user has the "admin" role, false if not.
-  def admin?
-    has_role?("admin")
-  end
-
-  # returns true if the specified role is associated with the user.
-  #  
-  #  user.has_role("admin")
-  def has_role?(role)
-    self.roles.count(:conditions => ["name = ?", role]) > 0
-  end
-  
-  # Adds a role to the user by name
-  #
-  # user.add_role("mentor")
-  def add_role(role)
-    return if self.has_role?(role)
-    self.roles << Role.find_by_name(role)
-  end
-end
-FILE
-
-file "app/models/role.rb", <<-FILE
-class Role < ActiveRecord::Base
-  validates_presence_of :name
-  
-  has_many :user_roles
-  has_many :users, :through => :user_roles
-end
-FILE
-
-file "app/models/user_role.rb", <<-FILE
-class UserRole < ActiveRecord::Base
-  belongs_to :user
-  belongs_to :role
 end
 FILE
 
@@ -185,7 +141,6 @@ file "app/controllers/application_controller.rb", <<-FILE
 # Likewise, all the methods added will be available for all controllers.
 
 class ApplicationController < ActionController::Base
-  before_filter :require_user # Protect the whole app by requiring a logged in user always
   helper :all # include all helpers, all the time
   protect_from_forgery # See ActionController::RequestForgeryProtection for details
 
@@ -204,7 +159,7 @@ class ApplicationController < ActionController::Base
       return @current_user if defined?(@current_user)
       @current_user = current_user_session && current_user_session.user
     end
-    
+
     def require_user
       unless current_user
         store_location
@@ -250,19 +205,19 @@ FILE
 
 file "app/views/users/edit.html.erb", <<-FILE
 <h1>Edit My Account</h1>
- 
+
 <% form_for @user, :url => account_path do |f| %>
   <%= f.error_messages %>
   <%= render :partial => "form", :object => f %>
   <%= f.submit "Update" %>
 <% end %>
- 
+
 <br /><%= link_to "My Profile", account_path %>
 FILE
 
 file "app/views/users/new.html.erb", <<-FILE
 <h1>Register</h1>
- 
+
 <% form_for @user, :url => account_path do |f| %>
   <%= f.error_messages %>
   <%= render :partial => "form", :object => f %>
@@ -279,44 +234,44 @@ file "app/views/users/show.html.erb", <<-FILE
   <b>Email:</b>
   <%=h @user.email %>
 </p>
- 
+
 <p>
   <b>Login count:</b>
   <%=h @user.login_count %>
 </p>
- 
+
 <p>
   <b>Last request at:</b>
   <%=h @user.last_request_at %>
 </p>
- 
+
 <p>
   <b>Last login at:</b>
   <%=h @user.last_login_at %>
 </p>
- 
+
 <p>
   <b>Current login at:</b>
   <%=h @user.current_login_at %>
 </p>
- 
+
 <p>
   <b>Last login ip:</b>
   <%=h @user.last_login_ip %>
 </p>
- 
+
 <p>
   <b>Current login ip:</b>
   <%=h @user.current_login_ip %>
 </p>
- 
- 
+
+
 <%= link_to 'Edit', edit_account_path %>
 FILE
 
 file "app/views/user_sessions/new.html.erb", <<-FILE
 <h1>Login</h1>
- 
+
 <% form_for @user_session, :url => user_session_path do |f| %>
   <%= f.error_messages %>
   <%= f.label :login %><br />
@@ -370,7 +325,7 @@ FILE
 file "db/migrate/20090621150348_users_and_roles.rb", <<-FILE
 class UsersAndRoles < ActiveRecord::Migration
   def self.up
-    
+
     create_table :users do |t|
       t.string    :login,               :null => false                # optional, you can use email instead, or both
       t.string    :email,               :null => false                # optional, you can use login instead, or both
@@ -390,26 +345,10 @@ class UsersAndRoles < ActiveRecord::Migration
       t.string    :last_login_ip                                      # optional, see Authlogic::Session::MagicColumns
       t.timestamps
     end
-    
+
     add_index :users, :login
     add_index :users, :persistence_token
     add_index :users, :last_request_at
-    
-
-    create_table :roles do |t|
-      t.string :name
-      t.timestamps
-    end
-    
-    create_table :user_roles do |t|
-      t.column :user_id, :integer
-      t.column :role_id, :integer
-      t.column :created_at, :datetime
-    end
-
-    add_index :user_roles, [:user_id, :role_id], :unique => true
-    add_index :roles, :name
-
   end
 
   def self.down
@@ -424,7 +363,7 @@ FILE
 
 # Use database (active record) session store
 initializer 'session_store.rb', <<-FILE
-  ActionController::Base.session = { :session_key => '_#{(1..6).map { |x| (65 + rand(26)).chr }.join}_session', :secret => '#{(1..40).map { |x| (65 + rand(26)).chr }.join}' }
+  ActionController::Base.session = { :key => '_#{(1..6).map { |x| (65 + rand(26)).chr }.join}_session', :secret => '#{(1..40).map { |x| (65 + rand(26)).chr }.join}' }
   ActionController::Base.session_store = :active_record_store
 FILE
 
@@ -525,12 +464,12 @@ module NavigationHelpers
   #
   def path_to(page_name)
     case page_name
-    
+
 		when /the home\s?page/
       '/'
     when /the account page/
       '/account'
-    
+
     # Add more mappings here.
     # Here is a more fancy example:
     #
